@@ -26,12 +26,12 @@ class GameStatus():
         '''
         use game state to update local variables.
         '''
-        self.player_hp              = state['player_hp']
-        self.boss_hp                = state['boss_hp']
-        self.is_player_hp_down      = state['is_player_hp_down']
-        self.is_boss_hp_down        = state['is_boss_hp_down']
+        self.player_hp              = state.player_hp
+        self.boss_hp                = state.boss_hp
+        self.is_player_hp_down      = state.is_player_hp_down
+        self.is_boss_hp_down        = state.is_boss_hp_down
         # this is next state after taking action.
-        # self.state_id               = state['cluster_class']
+        # self.state_id               = state.cluster_class']
 
 
 class GameStatusWindow(): 
@@ -117,7 +117,7 @@ class GameStatusWindow():
         self.variables[key].set('%s' % (self.game_status.action_name))
 
         key = 'state_id'
-        self.variables[key].set('%s: %d' % (key, self.game_status.state_id))
+        self.variables[key].set('%s: %s' % (key, self.game_status.state_id))
 
         key = 'player_hp'
         self.variables[key].set('%s: %.2f' % (key, self.game_status.player_hp))

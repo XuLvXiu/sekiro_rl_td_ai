@@ -28,8 +28,12 @@ class Storage:
 
 
     def convert_state_to_key(self, state): 
-        key = state['cluster_class']
+        # key = state['cluster_class']
         # print('len key: ', len(key))
+
+        # state-key is state_ids from (S, S t-1, S t-2)
+        key = tuple(state.get_state_id_with_history())
+        # print('key:', key)
         return key
 
 

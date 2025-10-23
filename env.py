@@ -21,8 +21,8 @@ import signal
 from pynput.keyboard import Listener, Key
 import numpy as np
 import os
-from cluster_model import ClusterModel
 from game_status_window import GameStatus, GameStatusWindow
+from state_manager import State, StateManager
 
 class Env(object): 
 
@@ -39,14 +39,10 @@ class Env(object):
         # currently do not support JUMP
         self.arr_action_name = ['IDLE', 'ATTACK', 'PARRY', 'SHIPO', 
             # 4
-            'DIANBU_ATTACK', 
-            # 5
             'DOUBLE_ATTACK', 
-            # 6
-            'DIANBU_PARRY_ATTACK', 
-            # 7
+            # 5
             'STAND_UP',
-            # 8
+            # 6
             'TAKE_HULU',
             'JUMP'
         ]
@@ -56,11 +52,9 @@ class Env(object):
         self.ATTACK_ACTION_ID               = 1
         self.PARRY_ACTION_ID                = 2
         self.SHIPO_ACTION_ID                = 3
-        self.DIANBU_ATTACK_ACTION_ID        = 4
-        self.DOUBLE_ATTACK_ACTION_ID        = 5 
-        self.DIANBU_PARRY_ATTACK_ACTION_ID  = 6
-        self.STAND_UP_ACTION_ID             = 7
-        self.TAKE_HULU_ACTION_ID            = 8
+        self.DOUBLE_ATTACK_ACTION_ID        = 4
+        self.STAND_UP_ACTION_ID             = 5
+        self.TAKE_HULU_ACTION_ID            = 6
 
         self.MODE_TRAIN = 'MODE_TRAIN'
         self.MODE_EVAL  = 'MODE_EVAL'
@@ -74,9 +68,9 @@ class Env(object):
         self.player_life = 2
 
         self.model = None
-        self.cluster_model = None
 
         self.HULU_THRESHOLD = 60
+        self.state_manager = StateManager(self.HULU_THRESHOLD)
 
         # Initialize camera
         grabscreen.init_camera(target_fps=12)
@@ -131,9 +125,6 @@ class Env(object):
         if torch.cuda.is_available(): 
             self.model = self.model.cuda()
 
-        self.cluster_model = ClusterModel()
-        self.cluster_model.load()
-
         while True: 
             frame = grabscreen.grab_screen()
             if frame is not None and window.set_windows_offset(frame):
@@ -144,14 +135,14 @@ class Env(object):
 
                 log.debug('waiting for classifier model loading...')
                 image = global_enemy_window.color.copy()
-                state = {
-                    'image': image,
-                    'player_hp': 100,
-                    'boss_hp': 100,
-                    'is_player_hp_down': False,
-                    'is_boss_hp_down': False,
-                    'HULU_THRESHOLD': self.HULU_THRESHOLD,
-                }
+
+                state = State()
+                state.image = image
+                state.player_hp = 100
+                state.boss_hp = 100
+                state.is_player_hp_down = False
+                state.is_boss_hp_down = False
+
                 inputs = self.transform_state(state)
 
                 with torch.no_grad(): 
@@ -159,9 +150,6 @@ class Env(object):
                         inputs = inputs.cuda()
 
                     outputs = self.model(inputs)
-
-                log.debug('waiting for cluster model loading...')
-                self.cluster_model.predict_env_inputs(inputs, state)
 
                 return True
             time.sleep(1)
@@ -175,7 +163,7 @@ class Env(object):
             BGR -> RGB tensor
             add a new axis
         '''
-        image = cv2.cvtColor(state['image'], cv2.COLOR_BGR2RGB)
+        image = cv2.cvtColor(state.image, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(image)
         pil_image = self.eval_transform(pil_image)
         inputs = pil_image.unsqueeze(0)
@@ -209,13 +197,7 @@ class Env(object):
         if action_id == self.ATTACK_ACTION_ID: 
             return True
 
-        if action_id == self.DIANBU_ATTACK_ACTION_ID: 
-            return True
-
         if action_id == self.DOUBLE_ATTACK_ACTION_ID: 
-            return True
-
-        if action_id == self.DIANBU_PARRY_ATTACK_ACTION_ID: 
             return True
 
         return False
@@ -240,12 +222,6 @@ class Env(object):
             return True
 
         '''
-        if action_id == self.DIANBU_ATTACK_ACTION_ID: 
-            return True
-
-        if action_id == self.DIANBU_PARRY_ATTACK_ACTION_ID: 
-            return True
-
         if action_id == self.STAND_UP_ACTION_ID: 
             return True
 
@@ -308,22 +284,22 @@ class Env(object):
 
         if self.mode == self.MODE_TRAIN: 
             # if you want to train TAKE_HULU, pls decrease this value to 15.
-            if state['player_hp'] < 50: 
+            if state.player_hp < 50: 
                 self.is_player_dead = True
                 self.player_life -= 1
                 return True
 
-            if state['boss_hp'] < 80: 
+            if state.boss_hp < 80: 
                 self.is_boss_dead = True
                 return True
 
         if self.mode == self.MODE_EVAL: 
-            if state['player_hp'] < 1: 
+            if state.player_hp < 1: 
                 self.is_player_dead = True
                 self.player_life -= 1
                 return True
 
-            if state['boss_hp'] < 1: 
+            if state.boss_hp < 1: 
                 self.is_boss_dead = True
                 return True
 
@@ -383,29 +359,38 @@ class Env(object):
         player_hp = player_hp_window.get_status()
         boss_hp = boss_hp_window.get_status()
 
-        state = {
-            'image': image,
-            'player_hp': player_hp,
-            'boss_hp': boss_hp,
-            'is_player_hp_down': False,
-            'is_boss_hp_down': False,
-            'HULU_THRESHOLD': self.HULU_THRESHOLD,
-        }
+        state = State()
+        state.image = image
+        state.player_hp = player_hp
+        state.boss_hp = boss_hp
+        state.is_player_hp_down = False
+        state.is_boss_hp_down = False
+        state.arr_history_state_id = self.state_manager.get_all_history_states_id()
 
         player_hp_down = self.previous_player_hp - player_hp 
         boss_hp_down = self.previous_boss_hp - boss_hp
         THRESHOLD = 3
         if player_hp_down > THRESHOLD: 
-            state['is_player_hp_down'] = True
+            state.is_player_hp_down = True
 
         if boss_hp_down > THRESHOLD: 
-            state['is_boss_hp_down'] = True
-
+            state.is_boss_hp_down = True
 
         inputs = self.transform_state(state)
-        state['cluster_class'] = self.cluster_model.predict_env_inputs(inputs, state)
 
-        log.debug('get new state, hp: %5.2f %5.2f, cluster_class: %s' % (state['player_hp'], state['boss_hp'], state['cluster_class']))
+        with torch.no_grad(): 
+            if torch.cuda.is_available(): 
+                inputs = inputs.cuda()
+            outputs = self.model(inputs)
+            _, predicted = torch.max(outputs, 1)
+            state.class_id = predicted.item()
+
+        # save it to state history manager.
+        self.state_manager.save(state)
+        # never modify state from now on.
+
+        log.debug('get new state, hp: %5.2f %5.2f, class_id: %s, state_id: %s' % (state.player_hp, 
+            state.boss_hp, state.class_id, state.state_id))
 
         # update game status
         self.game_status.update_by_state(state)
@@ -431,7 +416,7 @@ class Env(object):
         is_done = self.check_done(new_state)
         (reward, log_reward) = self.cal_reward(new_state, action_id)
 
-        log.debug('new step end, hp[%s][%s] is_done[%s], is_dead[%s][%s], player_life[%s], reward[%s %s]' % (new_state['player_hp'], new_state['boss_hp'], 
+        log.debug('new step end, hp[%s][%s] is_done[%s], is_dead[%s][%s], player_life[%s], reward[%s %s]' % (new_state.player_hp, new_state.boss_hp, 
             is_done, self.is_player_dead, self.is_boss_dead,
             self.player_life,
             reward, log_reward))
@@ -449,8 +434,8 @@ class Env(object):
         reward = 10
         log_reward = '.'
 
-        player_hp = new_state['player_hp']
-        boss_hp = new_state['boss_hp']
+        player_hp = new_state.player_hp
+        boss_hp = new_state.boss_hp
 
         player_hp_down = self.previous_player_hp - player_hp 
         boss_hp_down = self.previous_boss_hp - boss_hp
