@@ -21,7 +21,7 @@ from storage import Storage
 
 class Trainer: 
     '''
-    train a Monte-Carlo(MC) agent.
+    train a Temporal-Difference(TD) agent.
     '''
 
     def __init__(self, is_resume=True): 
@@ -37,10 +37,13 @@ class Trainer:
         # number of actions.
         self.action_space = self.env.action_space
 
-        # MC paramaters
+        # TD paramaters
         self.Q = Storage(self.action_space)
-        self.N = Storage(self.action_space)
         self.GAMMA = 0.85
+        self.ALPHA = 0.5
+
+        # extra paramaters for debug
+        self.N = Storage(self.action_space)
 
         # episode parameters
         self.MAX_EPISODES = 1000
@@ -67,8 +70,8 @@ class Trainer:
             log.info('episode: %s, epsilon: %s' % (i, epsilon))
             self.env.game_status.episode = i
 
-            episode = self.generate_episode_from_Q(epsilon)
-            self.update_Q(episode)
+            # one episode
+            episode = self.generate_episode_from_Q_and_update_Q(epsilon)
 
             self.next_episode += 1
 
@@ -83,25 +86,59 @@ class Trainer:
         log.info('mission accomplished :)')
     
 
-    def generate_episode_from_Q(self, epsilon): 
+    def select_action(self, state, epsilon): 
+        '''
+        select an action by state using Q
+        '''
+        if self.Q.has(state): 
+            log.info('select_action: state[%s] found, using epsilon-greedy' % (str(self.Q.convert_state_to_key(state))))
+            Q_s = self.Q.get(state)
+            probs = self.get_probs(Q_s, epsilon)
+            log.info('Q_s: %s' % (Q_s))
+            log.info('probs: %s' % (probs))
+            action_id = np.random.choice(self.action_space, p=probs)
+
+            '''
+            # only train some states
+            ########################################
+            if self.Q.convert_state_to_key(state) < 7: 
+                action_id = np.argmax(Q_s)
+            ########################################
+            '''
+            return action_id
+
+
+        # if Q does not have state, use classification model.
+        log.info('select_action: state[%s] not found, using base-model' % (str(self.Q.convert_state_to_key(state))))
+
+        inputs = self.env.transform_state(state)
+
+        with torch.no_grad(): 
+            if torch.cuda.is_available(): 
+                inputs = inputs.cuda()
+            outputs = self.env.model(inputs)
+            _, predicted = torch.max(outputs, 1)
+            action_id = predicted.item()
+
+        return action_id
+
+
+    def generate_episode_from_Q_and_update_Q(self, epsilon): 
         '''
         generate an episode using epsilon-greedy policy
+        and update Q
         '''
-        # global g_episode_is_running
-
-        episode = []
         env = self.env
 
+        # init S
         env.reset()
         state = env.get_state()
 
-        # g_episode_is_running = False
-        obj_found_count = {
-            'y': 0,
-            'n': 0,
-        }
-
         step_i = 0
+
+        # select action(A) by state(S) using Q
+        action_id = self.select_action(state, epsilon)
+        next_action_id = None
 
         while True: 
             # log.info('generate_episode main loop running')
@@ -110,8 +147,15 @@ class Trainer:
                 self.env.game_status.is_ai = False
                 self.env.update_game_status_window()
                 time.sleep(1.0)
+
                 env.reset()
                 state = env.get_state()
+
+                step_i = 0
+
+                # select action(A) by state(S) using Q
+                action_id = self.select_action(state, epsilon)
+                next_action_id = None
                 continue
 
             self.env.game_status.is_ai = True
@@ -124,50 +168,25 @@ class Trainer:
             self.env.game_status.state_id   = self.Q.convert_state_to_key(state)
             self.env.update_game_status_window()
 
-            # get action by state
-            if self.Q.has(state): 
-                log.info('state[%s] found, using epsilon-greedy' % (str(self.Q.convert_state_to_key(state))))
-                obj_found_count['y'] += 1
-                Q_s = self.Q.get(state)
-                probs = self.get_probs(Q_s, epsilon)
-                log.info('Q_s: %s' % (Q_s))
-                log.info('probs: %s' % (probs))
-                action_id = np.random.choice(self.action_space, p=probs)
-
-                '''
-                # only train some states
-                ########################################
-                if self.Q.convert_state_to_key(state) < 7: 
-                    action_id = np.argmax(Q_s)
-                ########################################
-                '''
-            else: 
-                log.info('state[%s] not found, using base-model' % (str(self.Q.convert_state_to_key(state))))
-                obj_found_count['n'] += 1
-
-                inputs = env.transform_state(state)
-
-                with torch.no_grad(): 
-                    if torch.cuda.is_available(): 
-                        inputs = inputs.cuda()
-                    outputs = env.model(inputs)
-                    _, predicted = torch.max(outputs, 1)
-                    action_id = predicted.item()
-
-            # do next step, get next state
+            # take action(A), get reward(R) and next state(S')
             next_state, reward, is_done = env.step(action_id)
-            t2 = time.time()
-            log.info('generate_episode main loop end one epoch, time: %.2f s' % (t2-t1))
-            step_i += 1
 
-            # save to current episode
-            # S0, A0, R1
-            # ...   ...   ...
-            # S T-1, A T-1, R T
-            episode.append((state, action_id, reward))
+            # get next action(A') by next_state(S') using Q
+            next_action_id = self.select_action(next_state, epsilon)
 
-            # prepare for next loop
+            # sarsa = (S, A, R, S', A')
+            sarsa = (state, action_id, reward, next_state, next_action_id)
+            self.update_Q(sarsa, is_done)
+
+            # prepare for next step
+            # S = S'
+            # A = A'
             state = next_state
+            action_id = next_action_id
+
+            t2 = time.time()
+            log.info('generate_episode main loop end one step, time: %.2f s' % (t2-t1))
+            step_i += 1
 
             if is_done: 
                 env.stop()
@@ -176,11 +195,8 @@ class Trainer:
 
         # end of while loop
 
-        log.info('episode done. length: %s, found_count: %s' % (len(episode), 
-            obj_found_count))
+        log.info('episode done. length: %s' % (step_i))
         self.env.update_game_status_window()
-
-        return episode
 
 
     def get_probs(self, Q_s, epsilon): 
@@ -199,60 +215,40 @@ class Trainer:
         return policy_s
 
 
-    def update_Q(self, episode): 
+    def update_Q(self, sarsa, is_done): 
         '''
-        update Q using the episode
+        update Q using sarsa
         '''
-        # unzip 
-        arr_state, arr_action, arr_reward = zip(*episode)
-        log.debug('after unzip: %s %s %s' % (len(arr_state),
-            len(arr_action), len(arr_reward)))
+        (state, action_id, reward, next_state, next_action_id) = sarsa
 
-        length = len(arr_reward)
-        arr_discount = np.array([self.GAMMA**i for i in range(length+1)])
+        Q_s = self.Q.get(state).copy()
+        Q_s_next = self.Q.get(next_state)
 
-        for i in range(0, length): 
-            state = arr_state[i]
 
-            # old Q(s) and N(s)
-            Q_s = self.Q.get(state)
-            N_s = self.N.get(state)
+        Q_s_a = Q_s[action_id]
+        Q_s_a_next = Q_s_next[next_action_id]
 
-            # a
-            action_id = arr_action[i]
+        # if S t+1 is the end of the episode, then Q(S t+1, A t+1) = 0
+        if is_done: 
+            Q_s_a_next = 0
 
-            # old Q(s, a) and old N(s, a)
-            # the variable names are inappropriate.
-            old_Q = Q_s[action_id]
-            old_N = N_s[action_id]
+        # Q(S, A) = Q(S, A) + alpha * (R + gamma * Q(S', A') - Q(S, A))
+        new_value = Q_s_a + self.ALPHA * (reward + self.GAMMA * Q_s_a_next - Q_s_a)
+        self.Q.set(state, action_id, new_value)
 
-            # G = the return that follows the [first] occurrence of s,a
-            # arr_reward[i] is R t+1
-            # arr_discount[0] is 1.0
-            # arr_discount[1] is GAMMA
-            # arr_discount[2] is GAMMA * GAMMA
-            # G = GAMMA * G + R t+1
-            arr_reward_following = arr_reward[i:] * arr_discount[:-(1+i)]
-            log.info('arr_reward_following: %s' % (arr_reward_following))
-            G = sum(arr_reward_following)
+        # for debug
+        N_s = self.N.get(state).copy()
+        old_cnt = N_s[action_id]
+        new_cnt = old_cnt + 1
+        self.N.set(state, action_id, new_cnt)
 
-            # add G to Returns(s, a)
-            # Q(s, a) = average(Returns(s, a))
-            avg = old_Q + (G - old_Q)/(old_N+1)
-            cnt = old_N + 1
-            self.Q.set(state, action_id, avg)
-            self.N.set(state, action_id, cnt)
-
-            # new Q(s) and new N(s)
-            # the variable names are inappropriate.
-            new_Q = self.Q.get(state)
-            new_N = self.N.get(state)
-            log.debug('update_Q step_i: %s, old_Q[%s] old_N[%s] state[%s] action[%s] reward[%s] G[%s] new_Q[%s] new_N[%s]' % (i,
-                old_Q, old_N,
-                self.Q.convert_state_to_key(state),
-                arr_action[i], arr_reward[i],
-                G, 
-                new_Q, new_N))
+        log.debug('''update_Q: 
+                old_Q_s[%s] old_N_s[%s], Q_s_next[%s],
+                state[%s] action[%s] reward[%s] next_state[%s] next_action[%s] next_Q_s_a[%s] 
+                new_Q_s[%s] new_N_s[%s]''' % (Q_s, N_s, Q_s_next,
+            str(self.Q.convert_state_to_key(state)), action_id, reward,
+            str(self.Q.convert_state_to_key(next_state)), next_action_id, Q_s_a_next,
+            self.Q.get(state), self.N.get(state)))
 
 
     def save_checkpoint(self, obj_information): 

@@ -30,15 +30,24 @@ class State():
         # some previous states, only save state-id
         self.arr_history_state_id     = []
 
+        # state id with history state id
+        # this is the final state id actually
+        self.final_state_id     = None
+
 
     def get_state_id_with_history(self): 
         '''
         get current state_id and history states id
         [S t-2, S t-1, S t]
         '''
+        if self.final_state_id is not None: 
+            return self.final_state_id
+
         ret = self.arr_history_state_id.copy()
         ret.append(self.state_id)
-        return ret
+        self.final_state_id = ret
+
+        return self.final_state_id
 
 
 class StateManager(): 
@@ -54,7 +63,7 @@ class StateManager():
 
         default_state = State()
 
-        # history state: [S t-2, S t-1]
+        # history state: [..., S t-2, S t-1]
         self.arr_state  = [default_state for x in range(self.MAX_LENGTH)]
 
         self.HULU_THRESHOLD = HULU_THRESHOLD
@@ -90,7 +99,6 @@ class StateManager():
         '''
         generate state id 
         '''
-
         # if player hp is down, this is a extra state
         if state.is_player_hp_down: 
             class_id = self.PLAYER_HP_DOWN_STATE_ID
@@ -103,6 +111,6 @@ class StateManager():
             # log.info('extra state take_hulu %s' % (class_id))
             return class_id
 
-        # default case
+        # default case, use the class id derived from the classification model.
         return state.class_id
 

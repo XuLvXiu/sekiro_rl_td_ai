@@ -389,8 +389,8 @@ class Env(object):
         self.state_manager.save(state)
         # never modify state from now on.
 
-        log.debug('get new state, hp: %5.2f %5.2f, class_id: %s, state_id: %s' % (state.player_hp, 
-            state.boss_hp, state.class_id, state.state_id))
+        log.debug('get new state, hp: %5.2f %5.2f, class_id: %s, state_id: %s, state_id_with_history: %s' % (state.player_hp, 
+            state.boss_hp, state.class_id, state.state_id, state.get_state_id_with_history()))
 
         # update game status
         self.game_status.update_by_state(state)
