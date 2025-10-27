@@ -121,6 +121,10 @@ while True:
     log.debug('Q_s:%s, a_star: %s' % (Q_s, a_star))
     action_id = a_star
 
+    # rule: 
+    if state.state_id == env.state_manager.HULU_STATE_ID: 
+        action_id = env.TAKE_HULU_ACTION_ID
+
     # do next step, get next state
     next_state, reward, is_done = env.step(action_id)
     t2 = time.time()

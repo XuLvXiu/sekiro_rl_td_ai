@@ -90,6 +90,11 @@ class Trainer:
         '''
         select an action by state using Q
         '''
+        if state.state_id == self.env.state_manager.HULU_STATE_ID: 
+            action_id = self.env.TAKE_HULU_ACTION_ID
+            log.info('select_action: state[%s], using predefined rule: [%s]' % (str(self.Q.convert_state_to_key(state)), action_id))
+            return action_id
+
         if self.Q.has(state): 
             log.info('select_action: state[%s] found, using epsilon-greedy' % (str(self.Q.convert_state_to_key(state))))
             Q_s = self.Q.get(state)
@@ -97,6 +102,14 @@ class Trainer:
             log.info('Q_s: %s' % (Q_s))
             log.info('probs: %s' % (probs))
             action_id = np.random.choice(self.action_space, p=probs)
+
+            '''
+            # train the states which occurs less frequently.
+            ########################################
+            if sum(self.N.get(state)) > self.MAX_EPISODES / 2: 
+                action_id = np.argmax(Q_s)
+            ########################################
+            '''
 
             '''
             # only train some states
