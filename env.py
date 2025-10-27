@@ -23,6 +23,7 @@ import numpy as np
 import os
 from game_status_window import GameStatus, GameStatusWindow
 from state_manager import State, StateManager
+import shutil
 
 class Env(object): 
 
@@ -112,13 +113,13 @@ class Env(object):
         '''
         # self.model only support [IDLE, ATTACK, PARRY, SHIPO]
         self.model = resnet18(weights=ResNet18_Weights.DEFAULT)
-        num_classes = 4
+        num_classes = 4 + 1
         print('num_classes:', num_classes)
 
         num_ftrs = self.model.fc.in_features
         self.model.fc = torch.nn.Linear(num_ftrs, num_classes)
 
-        model_file_name = 'model.resnet.v1'
+        model_file_name = 'model.resnet.v2'
         self.model.load_state_dict(torch.load(model_file_name))
         self.model.eval()
 
@@ -514,6 +515,7 @@ class Env(object):
     
 
 if __name__ == '__main__': 
+    is_debug = True
     global_is_running = False
     def signal_handler(sig, frame):
         log.debug("Gracefully exiting...")
@@ -544,17 +546,43 @@ if __name__ == '__main__':
     keyboard_listener = Listener(on_press=on_press)
     keyboard_listener.start()
 
+    def flush(): 
+        if not is_debug: 
+            return
+
+        if len(arr_images) == 0: 
+            return
+
+        log.info('flush images: %s, do NOT power off.' % (len(arr_images)))
+        image_dir = 'images/debug'
+        if os.path.exists(image_dir): 
+            shutil.rmtree(image_dir)
+        if not os.path.exists(image_dir): 
+            os.mkdir(image_dir)
+
+        for item in arr_images: 
+            cv2.imwrite(image_dir + '/' + item[1], item[0], [cv2.IMWRITE_PNG_COMPRESSION, 0])
+
+        log.info('flush done')
+
+
     env = Env()
     # env.train()
     env.eval()
     env.reset()
     state = env.get_state()
+    step_i = 0
+    arr_old_class_id = [0, 0]
+    arr_images = []
     while True: 
-        log.info('main loop running')
+        log.info('main loop running, step_i: %s' % (step_i))
         if not global_is_running: 
             time.sleep(1.0)
             env.reset()
             state = env.get_state()
+            step_i = 0
+            flush()
+            arr_images = []
             continue
 
         t1 = time.time()
@@ -569,6 +597,33 @@ if __name__ == '__main__':
             _, predicted = torch.max(outputs, 1)
             action_id = predicted.item()
 
+        class_id = action_id
+
+        old_class_id = arr_old_class_id[0]
+        if old_class_id == arr_old_class_id[1] and old_class_id == class_id: 
+            if class_id == 0: 
+                action_id = env.PARRY_ACTION_ID
+
+            if class_id == 1: 
+                action_id = env.SHIPO_ACTION_ID
+
+            if class_id == 2: 
+                action_id = env.DOUBLE_ATTACK_ACTION_ID
+
+            if class_id == 3: 
+                action_id = env.ATTACK_ACTION_ID
+
+            if class_id == 4: 
+                action_id = env.SHIPO_ACTION_ID
+        else: 
+            action_id = env.PARRY_ACTION_ID
+
+        action_name = env.arr_action_name[action_id]
+        log.info('class_id:%s, action_id:%s, action_name: %s' % (class_id, action_id, action_name))
+
+        # save state for debug 
+        arr_images.append((state.image.copy(), '%s_class_%s_action_%s_%s.png' % (step_i, class_id, action_id, action_name)))
+
         # do next step, get next state
         next_state, reward, is_done = env.step(action_id)
         t2 = time.time()
@@ -577,6 +632,10 @@ if __name__ == '__main__':
         # prepare for next loop
         state = next_state
 
+        step_i += 1
+        arr_old_class_id.pop(0)
+        arr_old_class_id.append(class_id)
+
         if is_done: 
             log.info('done.')
             break
@@ -584,3 +643,4 @@ if __name__ == '__main__':
     # end of while loop
 
     env.stop()
+

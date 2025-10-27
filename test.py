@@ -57,7 +57,9 @@ env.eval()
 env.reset()
 state = env.get_state()
 
-arr_action_id = [env.STAND_UP_ACTION_ID
+arr_action_id = [env.PARRY_ACTION_ID, env.PARRY_ACTION_ID, env.PARRY_ACTION_ID,
+        env.SHIPO_ACTION_ID, env.SHIPO_ACTION_ID, env.SHIPO_ACTION_ID, env.SHIPO_ACTION_ID,
+        env.PARRY_ACTION_ID, env.PARRY_ACTION_ID
 ]
 index = 0
 while True: 
@@ -83,7 +85,7 @@ while True:
     # prepare for next loop
     state = next_state
 
-    time.sleep(1)
+    # time.sleep(1)
 
     '''
     if is_done: 
