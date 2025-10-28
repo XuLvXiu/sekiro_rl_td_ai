@@ -99,6 +99,10 @@ actions:
     - *SHIPO
     - ['release', 's']
     - *PARRY
+    - ['delay', 0.1]
+    - *PARRY
+    - ['delay', 0.1]
+    - *RELEASE_PARRY
 
   DIANBU_PARRY_ATTACK: 
     - *SHIPO

@@ -116,17 +116,18 @@ while True:
         log.error('why Q not have this state?')
         sys.exit(-1)
 
+    # Q(s) contains rules and explore results.
     Q_s = Q.get(state)
     a_star = np.argmax(Q_s)
     log.debug('Q_s:%s, a_star: %s' % (Q_s, a_star))
     action_id = a_star
 
-    # rule: 
-    if state.state_id == env.state_manager.HULU_STATE_ID: 
-        action_id = env.TAKE_HULU_ACTION_ID
+    # at first, convert rf action_id to game action_id
+    game_action_id = env.arr_possible_action_id[action_id]
+    log.info('convert rl action_id[%s] to game action id[%s]' % (action_id, game_action_id))
 
     # do next step, get next state
-    next_state, reward, is_done = env.step(action_id)
+    next_state, reward, is_done = env.step(game_action_id)
     t2 = time.time()
     log.info('predict main loop end one epoch, time: %.2f s' % (t2-t1))
 
