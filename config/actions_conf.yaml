@@ -10,12 +10,46 @@ actions:
     - ['release_mouse', 'left']
     - ['release', 'w']
 
-  DOUBLE_ATTACK: 
+  DOUBLE_ATTACK: &DOUBLE_ATTACK
     - ['press', 'w']
     - ['press_mouse', 'left']
     - ['delay', 0.1 ]
     - ['release_mouse', 'left']
     - ['delay', 0.4 ]
+    - ['press_mouse', 'left']
+    - ['delay', 0.1 ]
+    - ['release_mouse', 'left']
+    - ['release', 'w']
+
+  TRIPLE_ATTACK: &TRIPLE_ATTACK
+    - ['press', 'w']
+    - ['press_mouse', 'left']
+    - ['delay', 0.1 ]
+    - ['release_mouse', 'left']
+    - ['delay', 0.4 ]
+    - ['press_mouse', 'left']
+    - ['delay', 0.1 ]
+    - ['release_mouse', 'left']
+    - ['delay', 0.4 ]
+    - ['press_mouse', 'left']
+    - ['delay', 0.1 ]
+    - ['release_mouse', 'left']
+    - ['release', 'w']
+
+  QUADRUPLE_ATTACK: 
+    - ['press', 'w']
+    - ['press_mouse', 'left']
+    - ['delay', 0.1 ]
+    - ['release_mouse', 'left']
+    - ['delay', 0.4 ]
+    - ['press_mouse', 'left']
+    - ['delay', 0.1 ]
+    - ['release_mouse', 'left']
+    - ['delay', 0.4 ]
+    - ['press_mouse', 'left']
+    - ['delay', 0.1 ]
+    - ['release_mouse', 'left']
+    - ['delay', 0.6 ]
     - ['press_mouse', 'left']
     - ['delay', 0.1 ]
     - ['release_mouse', 'left']
@@ -36,19 +70,38 @@ actions:
     - ['press', 'space']
     - ['delay', 0.1]
     - ['release', 'space']
+    - ['delay', 0.2]
+
+  SHIPO_ATTACK_DELAY: &SHIPO_ATTACK_DELAY
+    - ['delay', 1.1]
+
+  SHIPO_ATTACK: 
+    - *SHIPO
+    - *SHIPO_ATTACK_DELAY
+    - *ATTACK
+
+  SHIPO_DOUBLE_ATTACK: 
+    - *SHIPO
+    - *SHIPO_ATTACK_DELAY
+    - *DOUBLE_ATTACK
+
+  SHIPO_TRIPLE_ATTACK: 
+    - *SHIPO
+    - *SHIPO_ATTACK_DELAY
+    - *TRIPLE_ATTACK
 
   DIANBU_ATTACK: 
     - *SHIPO
-    - ['delay', 0.2]
     - *ATTACK
 
   STAND_UP: 
+    - ['press', 's']
     - *SHIPO
+    - ['release', 's']
     - *PARRY
 
   DIANBU_PARRY_ATTACK: 
     - *SHIPO
-    - ['delay', 0.2]
     - *PARRY
     - ['delay', 0.8]
     - *RELEASE_PARRY

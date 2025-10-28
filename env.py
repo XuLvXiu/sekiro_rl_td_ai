@@ -4,6 +4,7 @@
 game environment
 '''
 
+print('importing env')
 import grabscreen
 import window
 from window import BaseWindow, global_enemy_window, player_hp_window, boss_hp_window
@@ -26,6 +27,9 @@ from state_manager import State, StateManager
 import shutil
 
 class Env(object): 
+    '''
+    game env
+    '''
 
     def __init__(self): 
         log.info('init env')
@@ -35,28 +39,76 @@ class Env(object):
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         ])
         self.executor = ActionExecutor('./config/actions_conf.yaml')
-        # self.template_death = cv2.imread('./assets/death_crop.png', cv2.IMREAD_GRAYSCALE)
 
-        # currently do not support JUMP
+        # actions in the game
         self.arr_action_name = ['IDLE', 'ATTACK', 'PARRY', 'SHIPO', 
             # 4
             'DOUBLE_ATTACK', 
             # 5
-            'STAND_UP',
+            'TRIPLE_ATTACK',
             # 6
+            'QUADRUPLE_ATTACK',
+
+            # 7
             'TAKE_HULU',
+            # 8
+            'STAND_UP',
+
+            # 9
+            'SHIPO_ATTACK',
+            # 10
+            'SHIPO_DOUBLE_ATTACK',
+            # 11
+            'SHIPO_TRIPLE_ATTACK',
             'JUMP'
         ]
-        self.action_space = len(self.arr_action_name) - 1
 
         self.IDLE_ACTION_ID                 = 0
         self.ATTACK_ACTION_ID               = 1
         self.PARRY_ACTION_ID                = 2
         self.SHIPO_ACTION_ID                = 3
-        self.DOUBLE_ATTACK_ACTION_ID        = 4
-        self.STAND_UP_ACTION_ID             = 5
-        self.TAKE_HULU_ACTION_ID            = 6
 
+        self.DOUBLE_ATTACK_ACTION_ID        = 4
+        self.TRIPLE_ATTACK_ACTION_ID        = 5
+        self.QUADRUPLE_ATTACK_ACTION_ID     = 6
+
+        self.TAKE_HULU_ACTION_ID            = 7
+        self.STAND_UP_ACTION_ID             = 8
+
+        self.SHIPO_ATTACK_ACTION_ID         = 9
+        self.SHIPO_DOUBLE_ATTACK_ACTION_ID  = 10
+        self.SHIPO_TRIPLE_ATTACK_ACTION_ID  = 11
+
+        # state manager
+        self.state_manager = StateManager()
+
+        # possible actions to be explored in RF
+        # should we put them to train.py?
+        self.arr_possible_action_id = [
+            # 0-3
+            self.ATTACK_ACTION_ID, 
+            self.DOUBLE_ATTACK_ACTION_ID, 
+            self.TRIPLE_ATTACK_ACTION_ID,
+            self.QUADRUPLE_ATTACK_ACTION_ID,
+
+            # 4-6 
+            self.SHIPO_ATTACK_ACTION_ID,
+            self.SHIPO_DOUBLE_ATTACK_ACTION_ID,
+            self.SHIPO_TRIPLE_ATTACK_ACTION_ID,
+
+            # 7-9
+            # do NOT change the order or the position of these last 3 actions
+            # these actions will not be explored.
+            self.PARRY_ACTION_ID,
+            self.STAND_UP_ACTION_ID,
+            self.TAKE_HULU_ACTION_ID,
+        ]
+
+        # the last three actions will not be explored
+        self.RULE_COUNT = 3
+        self.action_space = len(self.arr_possible_action_id) - self.RULE_COUNT
+
+        # training mode and eval mode have different HP threshold
         self.MODE_TRAIN = 'MODE_TRAIN'
         self.MODE_EVAL  = 'MODE_EVAL'
         self.mode = None
@@ -68,10 +120,8 @@ class Env(object):
         self.is_player_dead = False
         self.player_life = 2
 
+        # the classification model v2
         self.model = None
-
-        self.HULU_THRESHOLD = 60
-        self.state_manager = StateManager(self.HULU_THRESHOLD)
 
         # Initialize camera
         grabscreen.init_camera(target_fps=12)
@@ -87,6 +137,7 @@ class Env(object):
             log.debug("Failed to detect game window.")
             raise ValueError('...')
 
+        # game status window
         self.game_status = GameStatus()
         self.game_status_window = None
 
@@ -113,7 +164,7 @@ class Env(object):
         '''
         # self.model only support [IDLE, ATTACK, PARRY, SHIPO]
         self.model = resnet18(weights=ResNet18_Weights.DEFAULT)
-        num_classes = 4 + 1
+        num_classes = 5
         print('num_classes:', num_classes)
 
         num_ftrs = self.model.fc.in_features
@@ -185,9 +236,6 @@ class Env(object):
         if action_id == self.PARRY_ACTION_ID: 
             return True
 
-        if action_id == self.STAND_UP_ACTION_ID: 
-            return True
-
         return False
 
 
@@ -199,6 +247,21 @@ class Env(object):
             return True
 
         if action_id == self.DOUBLE_ATTACK_ACTION_ID: 
+            return True
+
+        if action_id == self.TRIPLE_ATTACK_ACTION_ID: 
+            return True
+
+        if action_id == self.QUADRUPLE_ATTACK_ACTION_ID: 
+            return True
+
+        if action_id == self.SHIPO_ATTACK_ACTION_ID: 
+            return True
+
+        if action_id == self.SHIPO_DOUBLE_ATTACK_ACTION_ID: 
+            return True
+
+        if action_id == self.SHIPO_TRIPLE_ATTACK_ACTION_ID: 
             return True
 
         return False
@@ -222,14 +285,6 @@ class Env(object):
         if action_id == self.SHIPO_ACTION_ID: 
             return True
 
-        '''
-        if action_id == self.STAND_UP_ACTION_ID: 
-            return True
-
-        if action_id == self.TAKE_HULU_ACTION_ID: 
-            return True
-        '''
-
         return False
 
 
@@ -238,10 +293,13 @@ class Env(object):
         take a new action by action_id
         wait for the action to finish
         '''
+
+        '''
         # no idle
         # if you want to idle, please parry.
         if action_id == self.IDLE_ACTION_ID: 
             action_id = self.PARRY_ACTION_ID
+        '''
 
         # get action name
         action_name = self.arr_action_name[action_id]
@@ -261,17 +319,15 @@ class Env(object):
         log.debug('take_action: %s' % (action_name))
         self.executor.take_action(action_name, action_finished_callback=self.on_action_finished)
         while self.executor.is_running(): 
-            time.sleep(0.05)
+            time.sleep(0.01)
 
         self.previous_action_id = action_id
 
         # wait for boss damage to take effect.
         # how about player damage taken?
         if self.is_attack(action_id): 
+            # should check boss hp down or attack was blocked, to avoid sleep too long.
             time.sleep(0.8)
-
-        if self.is_shipo(action_id): 
-            time.sleep(0.2)
 
 
     def check_done(self, state): 
@@ -284,18 +340,17 @@ class Env(object):
             sys.exit(-1)
 
         if self.mode == self.MODE_TRAIN: 
-            # if you want to train TAKE_HULU, pls decrease this value to 15.
             if state.player_hp < 50: 
                 self.is_player_dead = True
                 self.player_life -= 1
                 return True
 
-            if state.boss_hp < 80: 
+            if state.boss_hp < 60: 
                 self.is_boss_dead = True
                 return True
 
         if self.mode == self.MODE_EVAL: 
-            if state.player_hp < 1: 
+            if state.player_hp < 0.24: 
                 self.is_player_dead = True
                 self.player_life -= 1
                 return True
@@ -351,6 +406,7 @@ class Env(object):
         get a new state from env.
         calcaute player's hp and boss' hp
         '''
+        log.debug('get new state begin')
         frame = grabscreen.grab_screen()
         BaseWindow.set_frame(frame)
         BaseWindow.update_all()
@@ -366,17 +422,23 @@ class Env(object):
         state.boss_hp = boss_hp
         state.is_player_hp_down = False
         state.is_boss_hp_down = False
-        state.arr_history_state_id = self.state_manager.get_all_history_states_id()
 
         player_hp_down = self.previous_player_hp - player_hp 
         boss_hp_down = self.previous_boss_hp - boss_hp
-        THRESHOLD = 3
-        if player_hp_down > THRESHOLD: 
+        THRESHOLD = 10
+        if player_hp_down >= THRESHOLD: 
             state.is_player_hp_down = True
+            state.is_player_hp_down_slightly = False
 
+        if player_hp_down > 0 and player_hp_down < THRESHOLD: 
+            state.is_player_hp_down = True
+            state.is_player_hp_down_slightly = True
+
+        THRESHOLD = 3
         if boss_hp_down > THRESHOLD: 
             state.is_boss_hp_down = True
 
+        # predict class id
         inputs = self.transform_state(state)
 
         with torch.no_grad(): 
@@ -388,10 +450,10 @@ class Env(object):
 
         # save it to state history manager.
         self.state_manager.save(state)
-        # never modify state from now on.
+        # never modify the state from now on.
 
-        log.debug('get new state, hp: %5.2f %5.2f, class_id: %s, state_id: %s, state_id_with_history: %s' % (state.player_hp, 
-            state.boss_hp, state.class_id, state.state_id, state.get_state_id_with_history()))
+        log.debug('get new state end, hp: %5.2f %5.2f, class_id: %s, state_id: %s, arr_history_class_id: %s' % (state.player_hp, 
+            state.boss_hp, state.class_id, state.state_id, state.arr_history_class_id))
 
         # update game status
         self.game_status.update_by_state(state)
@@ -429,68 +491,38 @@ class Env(object):
         '''
         calculate the reward according to the action take and the new state
 
-        打法: 立足防御，找机会偷一刀，尽量少垫步，绝不贪刀，稳扎稳打。
+        打法: 立足防御，识别 boss 的 3个招式(1突刺危、2擒拿危擒擒又拿拿、3飞渡浮舟)，利用破绽进行尽可能多的连击
         '''
-
         reward = 10
         log_reward = '.'
 
         player_hp = new_state.player_hp
         boss_hp = new_state.boss_hp
 
-        player_hp_down = self.previous_player_hp - player_hp 
-        boss_hp_down = self.previous_boss_hp - boss_hp
-        THRESHOLD = 3
-
         log_reward += 'action:%s,' % (action_id)
         
-        if self.is_take_hulu(action_id): 
-            if self.previous_player_hp > self.HULU_THRESHOLD: 
-                reward -= 50
-                log_reward += 'hulu&player_hp>threshold,'
-
-        if player_hp - self.previous_player_hp > THRESHOLD: 
-            reward += 50
-            log_reward += 'player_hp+,'
-            if not self.is_take_hulu(action_id): 
-                # reward -= 100
-                log.error('error: player_hp+, but player is NOT TAKE_HULU [current hp:%s][previous:%s]' % (player_hp, self.previous_player_hp))
-                self.game_status.error = 'delayed player_hp+'
-                self.update_game_status_window()
-                # sys.exit(-1)
-        else: 
-            if self.is_take_hulu(action_id): 
-                reward -= 50
-                log_reward += 'hulu_failed,'
-
-        if self.is_shipo(action_id): 
-            reward -= 10
-
-        if player_hp_down > THRESHOLD: 
+        if new_state.is_player_hp_down: 
             # the damage maybe caused by previous actions?
-            # but the previous action and the current action could become a combo.
             reward -= 20
             if self.is_attack(action_id): 
                 reward -= 30
                 log_reward += 'is_attack,'
-            if self.is_dianbu(action_id): 
-                reward -= 50
-                log_reward += 'is_dianbu,'
 
             log_reward += 'player_hp-,'
 
-        if boss_hp_down > THRESHOLD: 
+        if new_state.is_boss_hp_down: 
             reward += 30
             log_reward += 'boss_hp-,'
             if not self.is_attack(action_id): 
+                # the player is stunned when it pressed the left mouse button, 
+                # after one or two steps, then the attack occurs.
                 log.error('error: boss_hp-, but player is NOT attack')
                 self.game_status.error = 'delayed boss_hp-'
                 self.update_game_status_window()
         else: 
             if self.is_attack(action_id): 
-                # even the boss-hp is not changed, player can interrupt boss-combo.
-                reward -= 10
-                reward += 0
+                # even the boss-hp is not changed, player can interrupt boss-combo, or increase the posture of the boss.
+                reward -= 5
                 log_reward += 'boss_hp=,'
 
         self.previous_player_hp = player_hp
@@ -560,7 +592,7 @@ if __name__ == '__main__':
         if not os.path.exists(image_dir): 
             os.mkdir(image_dir)
 
-        for item in arr_images: 
+        for item in arr_images[-1000:]: 
             cv2.imwrite(image_dir + '/' + item[1], item[0], [cv2.IMWRITE_PNG_COMPRESSION, 0])
 
         log.info('flush done')
@@ -599,24 +631,39 @@ if __name__ == '__main__':
 
         class_id = action_id
 
-        old_class_id = arr_old_class_id[0]
-        if old_class_id == arr_old_class_id[1] and old_class_id == class_id: 
+        # if you modify this value, async it to state_manager.py
+        number_of_history_needed = 2
+        if class_id == state.FUZHOU_CLASS_ID: 
+            number_of_history_needed = 2
+
+        signal_strength = 0
+        for i in range(0, number_of_history_needed): 
+            if state.arr_history_class_id[-1 * (i + 1)] == class_id: 
+                signal_strength += 1
+
+        log.debug('class_id: %s, signal_strength: %s, number_of_history_needed: %s' % (class_id, 
+            signal_strength, number_of_history_needed))
+
+        if signal_strength >= number_of_history_needed: 
+            log.debug('signal_strength >= number_of_history_needed, class_id[%s]' % (class_id))
             if class_id == 0: 
                 action_id = env.PARRY_ACTION_ID
 
             if class_id == 1: 
-                action_id = env.SHIPO_ACTION_ID
+                action_id = env.SHIPO_ATTACK_ACTION_ID
 
             if class_id == 2: 
-                action_id = env.DOUBLE_ATTACK_ACTION_ID
+                action_id = env.QUADRUPLE_ATTACK_ACTION_ID
 
             if class_id == 3: 
                 action_id = env.ATTACK_ACTION_ID
 
             if class_id == 4: 
-                action_id = env.SHIPO_ACTION_ID
+                # 4 is inaccurate
+                action_id = env.PARRY_ACTION_ID
         else: 
             action_id = env.PARRY_ACTION_ID
+
 
         action_name = env.arr_action_name[action_id]
         log.info('class_id:%s, action_id:%s, action_name: %s' % (class_id, action_id, action_name))
@@ -627,7 +674,7 @@ if __name__ == '__main__':
         # do next step, get next state
         next_state, reward, is_done = env.step(action_id)
         t2 = time.time()
-        log.info('main loop end one epoch, time: %.2f s' % (t2-t1))
+        log.info('main loop end one step, time: %.2f s' % (t2-t1))
 
         # prepare for next loop
         state = next_state

@@ -3,8 +3,8 @@
 '''
 Storage schema for Q and N, which are dict of array: 
 Q = {
-    state_key_1: [0, 0, 0, 0],
-    state_key_2: [0, 0, 0, 0],
+    state_key_1: [0, 0, 0, 0, ...],
+    state_key_2: [0, 0, 0, 0, ...],
     ....
 }
 the length of the array is action_space.
@@ -28,11 +28,7 @@ class Storage:
 
 
     def convert_state_to_key(self, state): 
-        # key = state['cluster_class']
-        # print('len key: ', len(key))
-
-        # state-key is state_ids from (S, S t-1, S t-2)
-        key = tuple(state.get_state_id_with_history())
+        key = state.get_final_state_id()
         # print('key:', key)
         return key
 

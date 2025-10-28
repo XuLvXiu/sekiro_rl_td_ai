@@ -58,7 +58,7 @@ env.reset()
 state = env.get_state()
 
 arr_action_id = [env.PARRY_ACTION_ID, env.PARRY_ACTION_ID, env.PARRY_ACTION_ID,
-        env.SHIPO_ACTION_ID, env.SHIPO_ACTION_ID, env.SHIPO_ACTION_ID, env.SHIPO_ACTION_ID,
+        env.STAND_UP_ACTION_ID,
         env.PARRY_ACTION_ID, env.PARRY_ACTION_ID
 ]
 index = 0

@@ -18,6 +18,7 @@ import json
 import time
 import argparse
 from storage import Storage
+from rule import Rule
 
 class Trainer: 
     '''
@@ -34,16 +35,19 @@ class Trainer:
         self.env = Env()
         self.env.train()
 
-        # number of actions.
+        # number of actions to be explored.
         self.action_space = self.env.action_space
 
         # TD paramaters
-        self.Q = Storage(self.action_space)
+        # the length of Q[s] and N[s] 
+        # should be number of actions to be explored + number of actions not to be explored
+        d2_length = self.env.action_space + self.env.RULE_COUNT
+        self.Q = Storage(d2_length)
         self.GAMMA = 0.85
         self.ALPHA = 0.5
 
         # extra paramaters for debug
-        self.N = Storage(self.action_space)
+        self.N = Storage(d2_length)
 
         # episode parameters
         self.MAX_EPISODES = 1000
@@ -86,60 +90,51 @@ class Trainer:
         log.info('mission accomplished :)')
     
 
-    def select_action(self, state, epsilon): 
+    def select_action_using_Q(self, state, epsilon): 
         '''
         select an action by state using Q
         '''
-        if state.state_id == self.env.state_manager.HULU_STATE_ID: 
-            action_id = self.env.TAKE_HULU_ACTION_ID
-            log.info('select_action: state[%s], using predefined rule: [%s]' % (str(self.Q.convert_state_to_key(state)), action_id))
-            return action_id
-
         if self.Q.has(state): 
-            log.info('select_action: state[%s] found, using epsilon-greedy' % (str(self.Q.convert_state_to_key(state))))
+            log.info('select_action_using_Q: state[%s] found, using epsilon-greedy' % (str(self.Q.convert_state_to_key(state))))
             Q_s = self.Q.get(state)
             probs = self.get_probs(Q_s, epsilon)
             log.info('Q_s: %s' % (Q_s))
             log.info('probs: %s' % (probs))
             action_id = np.random.choice(self.action_space, p=probs)
-
-            '''
-            # train the states which occurs less frequently.
-            ########################################
-            if sum(self.N.get(state)) > self.MAX_EPISODES / 2: 
-                action_id = np.argmax(Q_s)
-            ########################################
-            '''
-
-            '''
-            # only train some states
-            ########################################
-            if self.Q.convert_state_to_key(state) < 7: 
-                action_id = np.argmax(Q_s)
-            ########################################
-            '''
             return action_id
 
 
-        # if Q does not have state, use classification model.
-        log.info('select_action: state[%s] not found, using base-model' % (str(self.Q.convert_state_to_key(state))))
+        # if Q does not have state, use random
+        log.info('select_action_using_Q: state[%s] not found, using random' % (str(self.Q.convert_state_to_key(state))))
+        action_id = np.random.randint(0, self.action_space)
+        return action_id
 
-        inputs = self.env.transform_state(state)
 
-        with torch.no_grad(): 
-            if torch.cuda.is_available(): 
-                inputs = inputs.cuda()
-            outputs = self.env.model(inputs)
-            _, predicted = torch.max(outputs, 1)
-            action_id = predicted.item()
+    def select_action(self, state, epsilon): 
+        '''
+        select an action by state using Q, model and rules.
+        '''
+        # rules: 
+        # state-5
+        # state-6
+        # state-0: class-0
+        # state-4: class-4
+        obj_rule = Rule()
+        action_id = obj_rule.apply(state, self.env)
+        if action_id is not None: 
+            log.info('select_action: state[%s], using predefined rule: [%s]' % (str(self.Q.convert_state_to_key(state)), action_id))
+            return action_id
 
+        # Q: 
+        # state-1/2/3: class-1/2/3
+        action_id = self.select_action_using_Q(state, epsilon)
         return action_id
 
 
     def generate_episode_from_Q_and_update_Q(self, epsilon): 
         '''
         generate an episode using epsilon-greedy policy
-        and update Q
+        and update Q after each step
         '''
         env = self.env
 
@@ -182,7 +177,9 @@ class Trainer:
             self.env.update_game_status_window()
 
             # take action(A), get reward(R) and next state(S')
-            next_state, reward, is_done = env.step(action_id)
+            # at first, convert rf action_id to game action_id
+            game_action_id = self.env.arr_possible_action_id[action_id]
+            next_state, reward, is_done = env.step(game_action_id)
 
             # get next action(A') by next_state(S') using Q
             next_action_id = self.select_action(next_state, epsilon)
@@ -237,7 +234,6 @@ class Trainer:
         Q_s = self.Q.get(state).copy()
         Q_s_next = self.Q.get(next_state)
 
-
         Q_s_a = Q_s[action_id]
         Q_s_a_next = Q_s_next[next_action_id]
 
@@ -272,7 +268,7 @@ class Trainer:
         log.info('Q: %s' % (self.Q.summary('Q')))
         log.info('N: %s' % (self.N.summary('N')))
         log.info('do NOT terminate the power, still saving...')
-        log.info('actions: %s' % (self.env.arr_action_name))
+        # log.info('actions: %s' % (self.env.arr_action_name))
         
         # pickle Q and N
         with open(self.CHECKPOINT_FILE, 'wb') as f:
