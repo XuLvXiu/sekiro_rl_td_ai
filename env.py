@@ -340,7 +340,7 @@ class Env(object):
             sys.exit(-1)
 
         if self.mode == self.MODE_TRAIN: 
-            if state.player_hp < 50: 
+            if state.player_hp < 0.243: 
                 self.is_player_dead = True
                 self.player_life -= 1
                 return True
@@ -350,7 +350,7 @@ class Env(object):
                 return True
 
         if self.mode == self.MODE_EVAL: 
-            if state.player_hp < 0.24: 
+            if state.player_hp < 0.243: 
                 self.is_player_dead = True
                 self.player_life -= 1
                 return True
@@ -468,7 +468,7 @@ class Env(object):
         get new state and calculate reward
         '''
 
-        log.debug('new step begin, action_id: %s' % (action_id))
+        log.debug('new step begin, game action_id: %s' % (action_id))
         self.game_status.action_name = self.arr_action_name[action_id]
         self.update_game_status_window()
 
@@ -479,7 +479,8 @@ class Env(object):
         is_done = self.check_done(new_state)
         (reward, log_reward) = self.cal_reward(new_state, action_id)
 
-        log.debug('new step end, hp[%s][%s] is_done[%s], is_dead[%s][%s], player_life[%s], reward[%s %s]' % (new_state.player_hp, new_state.boss_hp, 
+        log.debug('new step end, hp[%s][%s] previous_hp[%s][%s] is_done[%s], is_dead[%s][%s], player_life[%s], reward[%s %s]' % (new_state.player_hp, new_state.boss_hp, 
+            self.previous_player_hp, self.previous_boss_hp,
             is_done, self.is_player_dead, self.is_boss_dead,
             self.player_life,
             reward, log_reward))
@@ -499,7 +500,7 @@ class Env(object):
         player_hp = new_state.player_hp
         boss_hp = new_state.boss_hp
 
-        log_reward += 'action:%s,' % (action_id)
+        log_reward += 'game action:%s,' % (action_id)
         
         if new_state.is_player_hp_down: 
             # the damage maybe caused by previous actions?

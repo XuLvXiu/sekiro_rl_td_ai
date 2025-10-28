@@ -179,6 +179,7 @@ class Trainer:
             # take action(A), get reward(R) and next state(S')
             # at first, convert rf action_id to game action_id
             game_action_id = self.env.arr_possible_action_id[action_id]
+            log.info('convert rl action_id[%s] to game action id[%s]' % (action_id, game_action_id))
             next_state, reward, is_done = env.step(game_action_id)
 
             # get next action(A') by next_state(S') using Q
@@ -218,7 +219,7 @@ class Trainer:
         policy_s = ones * epsilon / self.action_space
 
         # best action probability
-        a_star = np.argmax(Q_s)
+        a_star = np.argmax(Q_s[:self.action_space])
         log.info('a_star: %s' % (a_star))
         policy_s[a_star] = 1 - epsilon + epsilon / self.action_space
 
