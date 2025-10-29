@@ -101,6 +101,13 @@ class Trainer:
             log.info('Q_s: %s' % (Q_s))
             log.info('probs: %s' % (probs))
             action_id = np.random.choice(self.action_space, p=probs)
+            '''
+            # only train some states
+            ########################################
+            if self.Q.convert_state_to_key(state) in [2, 3]: 
+                action_id = np.argmax(Q_s)
+            ########################################
+            '''
             return action_id
 
 
