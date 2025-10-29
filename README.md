@@ -5,7 +5,7 @@
 
 在蒙特卡洛项目中，state 的定义由聚类模型预测产生，从业务层面无法解释，所以在本次项目中，我们尝试重新定义 state。
 
-最终训练出来的 policy，与蒙特卡洛项目中的 policy 非常相似，稳定性非常的强，绝大部分时间都在防御，但是发起攻击的时机比蒙特卡洛 policy 要略多一些，所以整个战斗过程也稍快一些，当然了，只是稍快，攻击强度仍然是很低的。
+最终训练出来的 policy，与蒙特卡洛项目中的 policy 非常相似，稳定性非常的强，绝大部分时间都在防御，但是发起攻击的时机比蒙特卡洛 policy 要略多一些，所以整个战斗过程也稍快一些。攻击多了之后也产生了负面影响，比如受伤的概率也变大了。果然是做的越多，错的就越多。
 
 
 ## 演示视频
@@ -91,6 +91,11 @@ state-6 指的是 boss 受到了伤害且 player hp < 60，此时应该去喝血
 同时还会弹出一个小的 tk 窗口实时显示 player 与 boss 的 hp，这个功能得感谢原作者。
 
 
+- 测试：执行某个或者某几个动作
+
+`python test.py`
+
+
 - 收集数据
 
 `python data_collector.py`
@@ -105,17 +110,20 @@ state-6 指的是 boss 受到了伤害且 player hp < 60，此时应该去喝血
 
 如果在命令行中使用了 `--new` 参数，会首先清除 images/original 目录
 
+
 - 人工打标记
 
 把 images/original 中的图片按照不同的招式挑选出来放到 `images/move` 目录中的 0-4 子目录中。
 
 在仓库中我们已经提供了自己的 move 目录的压缩包 move.zip
 
+
 - 训练分类模型
 
 `python train_classifier.py` 
 
 它会切分训练集与测试集并训练一个 resnet18 分类模型，并在测试集上评估模型的效果。 
+
 
 - 训练 Sarsa policy
 
@@ -129,16 +137,13 @@ state-6 指的是 boss 受到了伤害且 player hp < 60，此时应该去喝血
 
 每一个 episode 结束之后，把 Q 与 N 保存到 checkpoint 文件中。
 
-时序差分并不需要 N，我们把 N 加上了，主要用于观察每个 action 的出现次数。
+时序差分并不需要 N，我们把 N 加上了，主要用于观察Q(s)中每个 action 的出现次数。
+
 
 - 查看 Q与 N
 
 `python checkpoint.py`
 
-
-- 测试：执行某个或者某几个动作
-
-`python test.py`
 
 
 ## 预测
@@ -163,9 +168,9 @@ python main.py
 
 ## 人工备份
 
-模型的训练结果主要涉及到如下的几个文件：
+模型的训练过程与结果主要涉及到如下的几个文件：
 - images/original	            收集到的截屏图像文件
-- images/move   人工标记
+- images/move   人工标记后的图像文件
 - checkpoint.json		记录了当前是哪个 episode，以及完成训练时的时间。
 - checkpoint.pkl		存储了 Q 与 N
 - model.resnet.v2   分类模型
