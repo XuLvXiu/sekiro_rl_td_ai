@@ -340,7 +340,7 @@ class Env(object):
             sys.exit(-1)
 
         if self.mode == self.MODE_TRAIN: 
-            if state.player_hp < 0.243: 
+            if state.player_hp < 1: 
                 self.is_player_dead = True
                 self.player_life -= 1
                 return True
@@ -350,7 +350,7 @@ class Env(object):
                 return True
 
         if self.mode == self.MODE_EVAL: 
-            if state.player_hp < 0.243: 
+            if state.player_hp < 1: 
                 self.is_player_dead = True
                 self.player_life -= 1
                 return True
