@@ -12,7 +12,7 @@
 
 三周目白金的时序差分 Sarsa 狼 再战 稀世强者苇名弦一郎
 
-https://www.bilibili.com/video//
+https://www.bilibili.com/video/BV1DA16BkE5H/
 
 ## 游戏设置
 
